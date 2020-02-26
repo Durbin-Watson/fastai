@@ -145,7 +145,7 @@ class SequentialEx(Module):
     def insert(self,i,l): return self.layers.insert(i,l)
 
 class MergeLayer(Module):
-    "Merge a shortcut with the result of the module by adding them or concatenating thme if `dense=True`."
+    "Merge a shortcut with the result of the module by adding them or concatenating them if `dense=True`."
     def __init__(self, dense:bool=False): self.dense=dense
     def forward(self, x): return torch.cat([x,x.orig], dim=1) if self.dense else (x+x.orig)
 
@@ -229,6 +229,11 @@ class FlattenedLoss():
     def reduction(self): return self.func.reduction
     @reduction.setter
     def reduction(self, v): self.func.reduction = v
+
+    @property
+    def weight(self): return self.func.weight
+    @weight.setter
+    def weight(self, v): self.func.weight = v
 
     def __call__(self, input:Tensor, target:Tensor, **kwargs)->Rank0Tensor:
         input = input.transpose(self.axis,-1).contiguous()

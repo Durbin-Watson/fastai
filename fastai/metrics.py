@@ -55,10 +55,12 @@ def dice(input:Tensor, targs:Tensor, iou:bool=False, eps:float=1e-8)->Rank0Tenso
     n = targs.shape[0]
     input = input.argmax(dim=1).view(n,-1)
     targs = targs.view(n,-1)
-    intersect = (input * targs).sum().float()
-    union = (input+targs).sum().float()
-    if not iou: return (2. * intersect / union if union > 0 else union.new([1.]).squeeze())
-    else: return (intersect / (union-intersect+eps) if union > 0 else union.new([1.]).squeeze())
+    intersect = (input * targs).sum(dim=1).float()
+    union = (input+targs).sum(dim=1).float()
+    if not iou: l = 2. * intersect / union
+    else: l = intersect / (union-intersect+eps)
+    l[union == 0.] = 1.
+    return l.mean()
 
 def psnr(input:Tensor, targs:Tensor)->Rank0Tensor:
     return 10 * (1. / mean_squared_error(input, targs)).log10()
@@ -293,8 +295,9 @@ def roc_curve(input:Tensor, targ:Tensor):
     tps = torch.cumsum(targ * 1, dim=-1)[threshold_idxs]
     fps = (1 + threshold_idxs - tps)
     if tps[0] != 0 or fps[0] != 0:
-        fps = torch.cat((LongTensor([0]), fps))
-        tps = torch.cat((LongTensor([0]), tps))
+        zer = fps.new_zeros(1)
+        fps = torch.cat((zer, fps))
+        tps = torch.cat((zer, tps))
     fpr, tpr = fps.float() / fps[-1], tps.float() / tps[-1]
     return fpr, tpr
 
@@ -312,35 +315,26 @@ class AUROC(Callback):
     def on_epoch_end(self, last_metrics, **kwargs):
         return add_metrics(last_metrics, auc_roc_score(self.preds, self.targs))
 
-class MultiLabelFbeta(LearnerCallback):
+class MultiLabelFbeta(Callback):
     "Computes the fbeta score for multilabel classification"
     # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html
     _order = -20 
-    def __init__(self, learn, beta=2, eps=1e-15, thresh=0.3, sigmoid=True, average="micro"):
-        super().__init__(learn)
-        self.eps, self.thresh, self.sigmoid, self.average, self.beta2 = \
-            eps, thresh, sigmoid, average, beta**2
-
-    def on_train_begin(self, **kwargs):
-        self.c = self.learn.data.c
-        if self.average != "none": self.learn.recorder.add_metric_names([f'{self.average}_fbeta'])
-        else: self.learn.recorder.add_metric_names([f"fbeta_{c}" for c in self.learn.data.classes])
+    def __init__(self, beta=2, eps=1e-15, thresh=0.3, sigmoid=True, average="micro"):
+        self.eps,self.thresh,self.sigmoid,self.average,self.beta = eps,thresh,sigmoid,average,beta
 
     def on_epoch_begin(self, **kwargs):
-        dvc = self.learn.data.device
-        self.tp = torch.zeros(self.c).to(dvc)
-        self.total_pred = torch.zeros(self.c).to(dvc)
-        self.total_targ = torch.zeros(self.c).to(dvc)
+        self.tp,self.total_pred,self.total_targ = 0,0,0
     
     def on_batch_end(self, last_output, last_target, **kwargs):
-        pred, targ = (last_output.sigmoid() if self.sigmoid else last_output) > self.thresh, last_target.byte()
+        pred, targ = ((last_output.sigmoid() if self.sigmoid else last_output) > self.thresh).byte(), last_target.byte()
         m = pred*targ
         self.tp += m.sum(0).float()
         self.total_pred += pred.sum(0).float()
         self.total_targ += targ.sum(0).float()
     
     def fbeta_score(self, precision, recall):
-        return (1 + self.beta2)*(precision*recall)/((self.beta2*precision + recall) + self.eps)
+        beta2 = self.beta**2
+        return (1 + beta2)*(precision*recall)/((beta2*precision + recall) + self.eps)
 
     def on_epoch_end(self, last_metrics, **kwargs):
         self.total_pred += self.eps

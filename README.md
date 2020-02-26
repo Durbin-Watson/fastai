@@ -11,6 +11,7 @@
 The fastai library simplifies training fast and accurate neural nets using modern best practices. See the [fastai website](https://docs.fast.ai) to get started. The library is based on research into deep learning best practices undertaken at [fast.ai](http://www.fast.ai), and includes \"out of the box\" support for [`vision`](https://docs.fast.ai/vision.html#vision), [`text`](https://docs.fast.ai/text.html#text), [`tabular`](https://docs.fast.ai/tabular.html#tabular), and [`collab`](https://docs.fast.ai/collab.html#collab) (collaborative filtering) models. For brief examples, see the [examples](https://github.com/fastai/fastai/tree/master/examples) folder; detailed examples are provided in the full [documentation](https://docs.fast.ai/). For instance, here's how to train an MNIST model using [resnet18](https://arxiv.org/abs/1512.03385) (from the [vision example](https://github.com/fastai/fastai/blob/master/examples/vision.ipynb)):
 
 ```python
+from fastai.vision import *
 path = untar_data(MNIST_PATH)
 data = image_data_from_folder(path)
 learn = cnn_learner(data, models.resnet18, metrics=accuracy)
@@ -49,7 +50,7 @@ Note that JPEG decoding can be a bottleneck, particularly if you have a fast GPU
 
 ```bash
 conda uninstall --force jpeg libtiff -y
-conda install -c conda-forge libjpeg-turbo
+conda install -c conda-forge libjpeg-turbo pillow==6.0.0
 CC="cc -mavx2" pip install --no-cache-dir -U --force-reinstall --no-binary :all: --compile pillow-simd
 ```
 If you only care about faster JPEG decompression, it can be `pillow` or `pillow-simd` in the last command above, the latter speeds up other image processing operations. For the full story see [Pillow-SIMD](https://docs.fast.ai/performance.html#faster-image-processing).
